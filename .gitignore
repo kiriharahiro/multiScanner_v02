@@ -1,0 +1,34 @@
+﻿# ====================================================================
+# multiScanner_v02: .gitignore (セキュリティ ＆ 漏洩防止ルール)
+# ====================================================================
+
+# 1. 現場・実運用専用マニュアル・ローカル設定ファイル (機密・実名保護)
+*_久喜市本番用.*
+*.local.*
+config.js
+config.local.js
+.env
+.env.*
+credentials.json
+token.json
+
+# 2. AI対話生ログ・アシスタントメタデータ (重大な情報漏洩防止)
+conversation_log*
+*.jsonl
+brain/
+.gemini/
+.agents/
+
+# 3. 業務実データ・ログ・一時ファイル
+*.log
+*.tmp
+*.pdf
+test_data_*
+real_data_*
+
+# 4. OS・エディタ一時ファイル
+.DS_Store
+Thumbs.db
+desktop.ini
+.vscode/
+.idea/

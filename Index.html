@@ -1,0 +1,1464 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <base target="_top">
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0b0f19">
+  <title>QR・NFC ハイブリッドスキャナー v02</title>
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=M+PLUS+1p:wght@400;500;700&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+  
+  <!-- html5-qrcode ライブラリ (QRコード高速認識) -->
+  <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+  
+  <style>
+    /* ====================================================================
+       デザインシステム & スタイル
+       ==================================================================== */
+    :root {
+      --bg-main: #0b0f19;
+      --bg-card: rgba(18, 24, 40, 0.75);
+      --bg-card-solid: #121828;
+      --border-card: rgba(255, 255, 255, 0.08);
+      --border-highlight: rgba(99, 102, 241, 0.35);
+
+      --text-primary: #f8fafc;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+
+      --accent-qr: #06b6d4;
+      --accent-qr-glow: rgba(6, 182, 212, 0.3);
+      --accent-nfc: #8b5cf6;
+      --accent-nfc-glow: rgba(139, 92, 246, 0.3);
+
+      --success: #10b981;
+      --success-glow: rgba(16, 185, 129, 0.25);
+      --warning: #f59e0b;
+      --danger: #ef4444;
+
+      --radius-sm: 8px;
+      --radius-md: 14px;
+      --radius-lg: 20px;
+      --radius-full: 9999px;
+
+      --shadow-card: 0 10px 25px -5px rgba(0, 0, 0, 0.4), 0 8px 10px -6px rgba(0, 0, 0, 0.3);
+      --shadow-glow: 0 0 20px rgba(99, 102, 241, 0.2);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      -webkit-tap-highlight-color: transparent;
+    }
+
+    body {
+      font-family: 'Inter', 'M PLUS 1p', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: radial-gradient(circle at 50% 0%, #172554 0%, #0b0f19 75%);
+      color: var(--text-primary);
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 12px;
+      overflow-x: hidden;
+    }
+
+    .app-container {
+      width: 100%;
+      max-width: 480px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+      padding-bottom: 30px;
+    }
+
+    /* --- ヘッダー --- */
+    .app-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 8px 4px;
+    }
+
+    .header-left {
+      display: flex;
+      flex-direction: column;
+      gap: 2px;
+    }
+
+    .app-logo-badge {
+      font-family: 'Outfit', sans-serif;
+      font-size: 0.65rem;
+      font-weight: 700;
+      letter-spacing: 0.08em;
+      color: var(--accent-qr);
+      text-transform: uppercase;
+    }
+
+    .app-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #fff;
+      letter-spacing: -0.02em;
+    }
+
+    .header-right {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .badge {
+      padding: 4px 10px;
+      font-size: 0.75rem;
+      font-weight: 600;
+      border-radius: var(--radius-full);
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      backdrop-filter: blur(8px);
+      transition: all 0.3s ease;
+    }
+
+    .badge.online {
+      background: rgba(16, 185, 129, 0.15);
+      color: #34d399;
+      border: 1px solid rgba(16, 185, 129, 0.3);
+    }
+
+    .badge.online::before {
+      content: '';
+      width: 6px;
+      height: 6px;
+      background: #10b981;
+      border-radius: 50%;
+      box-shadow: 0 0 8px #10b981;
+    }
+
+    .badge.org {
+      background: rgba(99, 102, 241, 0.15);
+      color: #a5b4fc;
+      border: 1px solid rgba(99, 102, 241, 0.3);
+    }
+
+    .icon-btn {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      color: var(--text-primary);
+      width: 36px;
+      height: 36px;
+      border-radius: var(--radius-sm);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      cursor: pointer;
+      font-size: 1.1rem;
+      backdrop-filter: blur(8px);
+      transition: all 0.2s ease;
+    }
+
+    .icon-btn:hover {
+      background: rgba(255, 255, 255, 0.1);
+      border-color: var(--border-highlight);
+    }
+
+    /* --- カウンターバー --- */
+    .stats-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-around;
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: var(--radius-md);
+      padding: 10px 14px;
+      backdrop-filter: blur(12px);
+      box-shadow: var(--shadow-card);
+    }
+
+    .stat-item {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 2px;
+    }
+
+    .stat-label {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      font-weight: 500;
+    }
+
+    .stat-value {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.3rem;
+      font-weight: 700;
+    }
+
+    .stat-value.pending { color: var(--warning); }
+    .stat-value.synced { color: var(--success); }
+
+    .stat-divider {
+      width: 1px;
+      height: 28px;
+      background: var(--border-card);
+    }
+
+    /* --- タブ切り替え --- */
+    .mode-tabs {
+      display: flex;
+      background: rgba(15, 23, 42, 0.8);
+      padding: 4px;
+      border-radius: var(--radius-md);
+      border: 1px solid var(--border-card);
+      gap: 4px;
+    }
+
+    .tab-btn {
+      flex: 1;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 8px;
+      padding: 10px 14px;
+      background: transparent;
+      border: none;
+      border-radius: 10px;
+      color: var(--text-secondary);
+      font-size: 0.88rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .tab-btn.active {
+      color: #fff;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+    }
+
+    #tabQr.active {
+      background: linear-gradient(135deg, rgba(6, 182, 212, 0.25) 0%, rgba(6, 182, 212, 0.1) 100%);
+      border: 1px solid rgba(6, 182, 212, 0.4);
+      color: #67e8f9;
+    }
+
+    #tabNfc.active {
+      background: linear-gradient(135deg, rgba(139, 92, 246, 0.25) 0%, rgba(139, 92, 246, 0.1) 100%);
+      border: 1px solid rgba(139, 92, 246, 0.4);
+      color: #c4b5fd;
+    }
+
+    /* --- スキャナー領域 --- */
+    .scanner-container {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: var(--radius-lg);
+      padding: 16px;
+      backdrop-filter: blur(16px);
+      box-shadow: var(--shadow-card);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 310px;
+      justify-content: center;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .scanner-view {
+      display: none;
+      width: 100%;
+      flex-direction: column;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .scanner-view.active {
+      display: flex;
+    }
+
+    /* QRカメラスタイル */
+    .camera-wrapper {
+      position: relative;
+      width: 100%;
+      max-width: 320px;
+      aspect-ratio: 1 / 1;
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      background: #000;
+      box-shadow: inset 0 0 20px rgba(0, 0, 0, 0.8);
+      border: 2px solid rgba(6, 182, 212, 0.3);
+    }
+
+    #qrReader {
+      width: 100% !important;
+      height: 100% !important;
+      border: none !important;
+    }
+
+    #qrReader video {
+      width: 100% !important;
+      height: 100% !important;
+      object-fit: cover !important;
+      border-radius: var(--radius-md);
+    }
+
+    .qr-guide-box {
+      position: absolute;
+      top: 15%;
+      left: 15%;
+      right: 15%;
+      bottom: 15%;
+      border: 2px dashed rgba(6, 182, 212, 0.8);
+      border-radius: 12px;
+      pointer-events: none;
+      overflow: hidden;
+    }
+
+    .scan-laser {
+      width: 100%;
+      height: 3px;
+      background: linear-gradient(90deg, transparent, #06b6d4, transparent);
+      box-shadow: 0 0 10px #06b6d4;
+      animation: scanLaserAnim 2s infinite ease-in-out;
+    }
+
+    @keyframes scanLaserAnim {
+      0% { transform: translateY(0); opacity: 0; }
+      20% { opacity: 1; }
+      80% { opacity: 1; }
+      100% { transform: translateY(180px); opacity: 0; }
+    }
+
+    /* NFCレーダースタイル */
+    .nfc-radar-wrapper {
+      position: relative;
+      width: 180px;
+      height: 180px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 10px 0;
+    }
+
+    .radar-pulse {
+      position: absolute;
+      border-radius: 50%;
+      border: 2px solid var(--accent-nfc);
+      opacity: 0;
+      animation: nfcRadarPulse 2.8s cubic-bezier(0.1, 0.7, 0.1, 1) infinite;
+    }
+
+    .ring-1 { width: 80px; height: 80px; animation-delay: 0s; }
+    .ring-2 { width: 130px; height: 130px; animation-delay: 0.9s; }
+    .ring-3 { width: 180px; height: 180px; animation-delay: 1.8s; }
+
+    @keyframes nfcRadarPulse {
+      0% { transform: scale(0.5); opacity: 0.8; }
+      100% { transform: scale(1.15); opacity: 0; }
+    }
+
+    .nfc-card-icon {
+      font-size: 3.2rem;
+      z-index: 2;
+      filter: drop-shadow(0 0 15px rgba(139, 92, 246, 0.6));
+      animation: floatCard 3s ease-in-out infinite;
+    }
+
+    @keyframes floatCard {
+      0%, 100% { transform: translateY(0); }
+      50% { transform: translateY(-8px); }
+    }
+
+    .scanner-controls {
+      display: flex;
+      gap: 10px;
+      width: 100%;
+      max-width: 320px;
+    }
+
+    .control-btn {
+      flex: 1;
+      padding: 10px 14px;
+      border-radius: var(--radius-sm);
+      font-size: 0.88rem;
+      font-weight: 600;
+      border: none;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      transition: all 0.2s ease;
+    }
+
+    .control-btn.primary {
+      background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%);
+      color: #fff;
+      box-shadow: 0 4px 12px rgba(79, 70, 229, 0.3);
+    }
+
+    .control-btn.primary:hover {
+      filter: brightness(1.1);
+      transform: translateY(-1px);
+    }
+
+    .control-btn.secondary {
+      background: rgba(255, 255, 255, 0.08);
+      color: var(--text-primary);
+      border: 1px solid var(--border-card);
+    }
+
+    .control-btn.secondary:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .scan-hint {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      text-align: center;
+    }
+
+    /* --- 最新読取結果カード --- */
+    .latest-card-section {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 4px;
+    }
+
+    .section-title {
+      font-size: 0.82rem;
+      font-weight: 600;
+      color: var(--text-secondary);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .type-badge {
+      font-size: 0.7rem;
+      font-weight: 700;
+      padding: 3px 8px;
+      border-radius: var(--radius-full);
+      text-transform: uppercase;
+    }
+
+    .type-badge.idle { background: rgba(255,255,255,0.08); color: var(--text-muted); }
+    .type-badge.qr { background: rgba(6, 182, 212, 0.2); color: #67e8f9; border: 1px solid rgba(6, 182, 212, 0.4); }
+    .type-badge.nfc { background: rgba(139, 92, 246, 0.2); color: #c4b5fd; border: 1px solid rgba(139, 92, 246, 0.4); }
+
+    .result-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: var(--radius-md);
+      padding: 16px;
+      backdrop-filter: blur(12px);
+      box-shadow: var(--shadow-card);
+      border-left: 4px solid var(--accent-qr);
+      transition: all 0.3s ease;
+    }
+
+    .result-card.nfc-active {
+      border-left-color: var(--accent-nfc);
+    }
+
+    .result-card.success-flash {
+      animation: cardFlash 0.6s ease;
+    }
+
+    @keyframes cardFlash {
+      0% { background: rgba(16, 185, 129, 0.35); }
+      100% { background: var(--bg-card); }
+    }
+
+    .result-data-text {
+      font-family: 'Outfit', sans-serif;
+      font-size: 1.35rem;
+      font-weight: 700;
+      color: #fff;
+      word-break: break-all;
+    }
+
+    .result-sub-text {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      font-family: monospace;
+      margin-top: 4px;
+    }
+
+    .result-footer {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-top: 12px;
+      padding-top: 10px;
+      border-top: 1px solid var(--border-card);
+    }
+
+    .result-time {
+      font-size: 0.75rem;
+      color: var(--text-muted);
+    }
+
+    .result-sync {
+      font-size: 0.75rem;
+      font-weight: 600;
+      padding: 2px 8px;
+      border-radius: var(--radius-full);
+    }
+
+    .status-waiting { background: rgba(245, 158, 11, 0.15); color: #fbbf24; }
+    .status-synced { background: rgba(16, 185, 129, 0.15); color: #34d399; }
+    .status-error { background: rgba(239, 68, 68, 0.15); color: #f87171; }
+
+    /* --- 履歴リスト --- */
+    .history-section {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .history-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0 4px;
+    }
+
+    .text-link-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      cursor: pointer;
+      text-decoration: underline;
+    }
+
+    .history-empty {
+      background: var(--bg-card);
+      border: 1px dashed var(--border-card);
+      border-radius: var(--radius-md);
+      padding: 20px;
+      text-align: center;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+
+    .history-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+
+    .history-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border-card);
+      border-radius: var(--radius-sm);
+      padding: 10px 12px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      font-size: 0.82rem;
+      animation: slideDown 0.3s ease;
+    }
+
+    @keyframes slideDown {
+      0% { opacity: 0; transform: translateY(-8px); }
+      100% { opacity: 1; transform: translateY(0); }
+    }
+
+    .history-item-left {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      overflow: hidden;
+    }
+
+    .history-badge {
+      font-size: 0.65rem;
+      font-weight: 700;
+      padding: 2px 6px;
+      border-radius: 4px;
+      text-transform: uppercase;
+    }
+
+    .history-badge.qr { background: rgba(6, 182, 212, 0.2); color: #67e8f9; }
+    .history-badge.nfc { background: rgba(139, 92, 246, 0.2); color: #c4b5fd; }
+    .history-badge.test { background: rgba(245, 158, 11, 0.2); color: #fbbf24; }
+
+    .history-info {
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    .history-text {
+      font-weight: 600;
+      color: #fff;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 220px;
+    }
+
+    .history-sub {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+
+    /* --- 設定モーダル --- */
+    .modal-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background: rgba(0, 0, 0, 0.75);
+      backdrop-filter: blur(8px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      z-index: 100;
+    }
+
+    .modal-overlay.open {
+      display: flex;
+    }
+
+    .modal-card {
+      background: var(--bg-card-solid);
+      border: 1px solid var(--border-highlight);
+      border-radius: var(--radius-lg);
+      width: 100%;
+      max-width: 420px;
+      box-shadow: var(--shadow-glow), var(--shadow-card);
+      overflow: hidden;
+      animation: modalPop 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+
+    @keyframes modalPop {
+      0% { transform: scale(0.9); opacity: 0; }
+      100% { transform: scale(1); opacity: 1; }
+    }
+
+    .modal-header {
+      padding: 16px 20px;
+      border-bottom: 1px solid var(--border-card);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-title {
+      font-size: 1.05rem;
+      font-weight: 700;
+    }
+
+    .modal-close-btn {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.5rem;
+      cursor: pointer;
+    }
+
+    .modal-body {
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      gap: 18px;
+    }
+
+    .info-box {
+      background: rgba(99, 102, 241, 0.1);
+      border: 1px solid rgba(99, 102, 241, 0.3);
+      border-radius: var(--radius-sm);
+      padding: 12px;
+      font-size: 0.8rem;
+      line-height: 1.5;
+      color: #c7d2fe;
+    }
+
+    .setting-toggle-row {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .setting-name {
+      font-size: 0.88rem;
+      font-weight: 600;
+      color: #fff;
+    }
+
+    .setting-desc {
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      margin-top: 2px;
+    }
+
+    /* トグルスイッチ */
+    .switch {
+      position: relative;
+      display: inline-block;
+      width: 44px;
+      height: 24px;
+    }
+
+    .switch input { opacity: 0; width: 0; height: 0; }
+
+    .slider {
+      position: absolute;
+      cursor: pointer;
+      top: 0; left: 0; right: 0; bottom: 0;
+      background-color: rgba(255, 255, 255, 0.15);
+      transition: .3s;
+      border-radius: 24px;
+    }
+
+    .slider:before {
+      position: absolute;
+      content: "";
+      height: 18px;
+      width: 18px;
+      left: 3px;
+      bottom: 3px;
+      background-color: white;
+      transition: .3s;
+      border-radius: 50%;
+    }
+
+    input:checked + .slider { background-color: #4f46e5; }
+    input:checked + .slider:before { transform: translateX(20px); }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="app-container">
+    <!-- ヘッダーエリア -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="app-logo-badge">⚡ MULTI-SCAN v02</div>
+        <h1 class="app-title">組織内スキャナー</h1>
+      </div>
+      <div class="header-right">
+        <span class="badge org">組織内連携済</span>
+        <button id="openSettingsBtn" class="icon-btn" title="設定を開く" aria-label="設定">⚙️</button>
+      </div>
+    </header>
+
+    <!-- ステータス・カウンターバー -->
+    <section class="stats-bar">
+      <div class="stat-item">
+        <span class="stat-label">送信待機（保留）</span>
+        <span id="pendingCount" class="stat-value pending">0</span>
+      </div>
+      <div class="stat-divider"></div>
+      <div class="stat-item">
+        <span class="stat-label">スプレッドシート記録済</span>
+        <span id="syncedCount" class="stat-value synced">0</span>
+      </div>
+    </section>
+
+    <!-- モード切り替えタブ -->
+    <nav class="mode-tabs" role="tablist">
+      <button id="tabQr" class="tab-btn active" role="tab" aria-selected="true">
+        <span class="tab-icon">📷</span>
+        <span class="tab-text">QRスキャナー</span>
+      </button>
+      <button id="tabNfc" class="tab-btn" role="tab" aria-selected="false">
+        <span class="tab-icon">📡</span>
+        <span class="tab-text">NFCリーダー</span>
+      </button>
+    </nav>
+
+    <!-- スキャナー表示領域 -->
+    <main class="scanner-container">
+      <!-- QRコード読み取りビュー -->
+      <div id="qrSection" class="scanner-view active">
+        <div class="camera-wrapper">
+          <div id="qrReader"></div>
+          <div id="qrGuideBox" class="qr-guide-box">
+            <div class="scan-laser"></div>
+          </div>
+        </div>
+        <div class="scanner-controls">
+          <button id="toggleCameraFacingBtn" class="control-btn secondary">
+            <span>🔄</span> カメラ切替
+          </button>
+          <button id="toggleQrScanBtn" class="control-btn primary">
+            <span id="qrBtnIcon">⏸️</span> <span id="qrBtnText">一時停止</span>
+          </button>
+        </div>
+        <p class="scan-hint">枠内にQRコードをかざすと自動で連続記録します</p>
+      </div>
+
+      <!-- NFCカード読み取りビュー -->
+      <div id="nfcSection" class="scanner-view">
+        <div class="nfc-radar-wrapper">
+          <div class="radar-pulse ring-1"></div>
+          <div class="radar-pulse ring-2"></div>
+          <div class="radar-pulse ring-3"></div>
+          <div class="nfc-card-icon">💳</div>
+        </div>
+        <div class="scanner-controls">
+          <button id="startNfcBtn" class="control-btn primary">
+            <span id="nfcBtnIcon">📡</span> <span id="nfcBtnText">NFCスキャン待機中</span>
+          </button>
+        </div>
+        <p class="scan-hint" id="nfcHintText">スマートフォン背面にカードをタッチしてください</p>
+      </div>
+    </main>
+
+    <!-- 最新の読み取り結果カード -->
+    <section class="latest-card-section">
+      <div class="section-header">
+        <span class="section-title">最新の読取結果</span>
+        <span id="latestTypeBadge" class="type-badge idle">待機中</span>
+      </div>
+      <div id="resultCard" class="result-card">
+        <div class="result-main">
+          <div id="latestDataText" class="result-data-text">まだ読み取りデータはありません</div>
+          <div id="latestUidText" class="result-sub-text"></div>
+        </div>
+        <div class="result-footer">
+          <span id="latestTime" class="result-time">--:--:--</span>
+          <span id="latestSyncStatus" class="result-sync status-waiting">待機</span>
+        </div>
+      </div>
+    </section>
+
+    <!-- 読み取り履歴ログ -->
+    <section class="history-section">
+      <div class="history-header">
+        <span class="section-title">スキャン履歴 (最新10件)</span>
+        <div style="display: flex; gap: 12px; align-items: center;">
+          <button id="retryUnsyncedBtn" class="text-link-btn" style="color: #f59e0b; font-weight: 600; display: none;">🔄 未送信を再送 (<span id="retryCount">0</span>)</button>
+          <button id="clearHistoryBtn" class="text-link-btn">履歴クリア</button>
+        </div>
+      </div>
+      <div id="historyEmpty" class="history-empty">
+        <p>カードまたはQRコードをスキャンするとここに表示されます</p>
+      </div>
+      <ul id="historyList" class="history-list"></ul>
+    </section>
+  </div>
+
+  <!-- 設定モーダル -->
+  <div id="settingsModal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h2 class="modal-title">⚙️ システム設定</h2>
+        <button id="closeSettingsBtn" class="modal-close-btn">&times;</button>
+      </div>
+      <div class="modal-body">
+        <div class="info-box">
+          ✅ <strong>完全組織内運用モード（GAS直結）</strong><br>
+          外部サーバーを使用せず、スプレッドシートと直接連携しています。URLの設定は不要です。
+        </div>
+
+        <div class="setting-toggle-row">
+          <div>
+            <span class="setting-name">読み取り成功音（電子音）</span>
+            <p class="setting-desc">ピピッという電子音を鳴らします</p>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="soundToggle" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="setting-toggle-row">
+          <div>
+            <span class="setting-name">バイブレーション（振動）</span>
+            <p class="setting-desc">スキャン成功時にスマホを振動させます</p>
+          </div>
+          <label class="switch">
+            <input type="checkbox" id="vibrateToggle" checked>
+            <span class="slider"></span>
+          </label>
+        </div>
+
+        <div class="modal-actions">
+          <button id="testConnectionBtn" class="control-btn secondary">テスト書き込み実行</button>
+          <button id="saveSettingsBtn" class="control-btn primary">設定を保存</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // ====================================================================
+    // アプリケーション ロジック (JavaScript)
+    // ====================================================================
+
+    // DOM要素
+    const tabQr = document.getElementById('tabQr');
+    const tabNfc = document.getElementById('tabNfc');
+    const qrSection = document.getElementById('qrSection');
+    const nfcSection = document.getElementById('nfcSection');
+
+    const pendingCountEl = document.getElementById('pendingCount');
+    const syncedCountEl = document.getElementById('syncedCount');
+
+    const toggleCameraFacingBtn = document.getElementById('toggleCameraFacingBtn');
+    const toggleQrScanBtn = document.getElementById('toggleQrScanBtn');
+    const qrBtnIcon = document.getElementById('qrBtnIcon');
+    const qrBtnText = document.getElementById('qrBtnText');
+
+    const startNfcBtn = document.getElementById('startNfcBtn');
+    const nfcBtnIcon = document.getElementById('nfcBtnIcon');
+    const nfcBtnText = document.getElementById('nfcBtnText');
+    const nfcHintText = document.getElementById('nfcHintText');
+
+    const resultCard = document.getElementById('resultCard');
+    const latestTypeBadge = document.getElementById('latestTypeBadge');
+    const latestDataText = document.getElementById('latestDataText');
+    const latestUidText = document.getElementById('latestUidText');
+    const latestTime = document.getElementById('latestTime');
+    const latestSyncStatus = document.getElementById('latestSyncStatus');
+
+    const historyEmpty = document.getElementById('historyEmpty');
+    const historyList = document.getElementById('historyList');
+    const clearHistoryBtn = document.getElementById('clearHistoryBtn');
+    const retryUnsyncedBtn = document.getElementById('retryUnsyncedBtn');
+    const retryCount = document.getElementById('retryCount');
+
+    const openSettingsBtn = document.getElementById('openSettingsBtn');
+    const closeSettingsBtn = document.getElementById('closeSettingsBtn');
+    const settingsModal = document.getElementById('settingsModal');
+    const soundToggle = document.getElementById('soundToggle');
+    const vibrateToggle = document.getElementById('vibrateToggle');
+    const testConnectionBtn = document.getElementById('testConnectionBtn');
+    const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+
+    // 状態管理
+    let currentMode = 'QR';
+    let enableSound = localStorage.getItem('multi_scan_sound') !== 'false';
+    let enableVibrate = localStorage.getItem('multi_scan_vibrate') !== 'false';
+    let scanQueue = JSON.parse(localStorage.getItem('multi_scan_queue_v02')) || [];
+    let totalSyncedCount = parseInt(localStorage.getItem('multi_scan_synced_count_v02')) || 0;
+
+    // 二重読み取り防止（2.5秒間スキップ）
+    let lastScannedData = '';
+    let lastScannedTime = 0;
+    const DUPLICATE_INTERVAL = 2500;
+
+    // QRスキャナー
+    let html5QrScanner = null;
+    let isQrScanning = false;
+    let currentFacingMode = 'environment'; // 背面カメラ
+
+    // NFCスキャナー
+    let ndefReader = null;
+    let isNfcScanning = false;
+
+    // Web Audio API（ピピッ音）
+    let audioCtx = null;
+    function initAudio() {
+      if (!audioCtx) {
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      }
+    }
+
+    function playSuccessBeep() {
+      if (!enableSound) return;
+      try {
+        initAudio();
+        if (audioCtx.state === 'suspended') audioCtx.resume();
+        const now = audioCtx.currentTime;
+        
+        // 第1音 (880Hz)
+        const osc1 = audioCtx.createOscillator();
+        const gain1 = audioCtx.createGain();
+        osc1.frequency.setValueAtTime(880, now);
+        gain1.gain.setValueAtTime(0.12, now);
+        gain1.gain.exponentialRampToValueAtTime(0.01, now + 0.1);
+        osc1.connect(gain1);
+        gain1.connect(audioCtx.destination);
+        osc1.start(now);
+        osc1.stop(now + 0.1);
+
+        // 第2音 (1760Hz)
+        const osc2 = audioCtx.createOscillator();
+        const gain2 = audioCtx.createGain();
+        osc2.frequency.setValueAtTime(1760, now + 0.1);
+        gain2.gain.setValueAtTime(0.15, now + 0.1);
+        gain2.gain.exponentialRampToValueAtTime(0.01, now + 0.25);
+        osc2.connect(gain2);
+        gain2.connect(audioCtx.destination);
+        osc2.start(now + 0.1);
+        osc2.stop(now + 0.25);
+      } catch (e) {
+        console.warn("音声再生エラー", e);
+      }
+    }
+
+    function triggerVibration() {
+      if (enableVibrate && navigator.vibrate) {
+        navigator.vibrate([100, 50, 100]);
+      }
+    }
+
+    // --- スキャン受信処理 ---
+    function handleScanSuccess(type, text, uid) {
+      const now = Date.now();
+      const trimmedText = (text || '').trim();
+      if (!trimmedText && !uid) return;
+
+      // 二重読み取り防止ガード
+      const checkKey = type + '_' + trimmedText + '_' + (uid || '');
+      if (checkKey === lastScannedData && (now - lastScannedTime) < DUPLICATE_INTERVAL) {
+        return; // スキップ
+      }
+      lastScannedData = checkKey;
+      lastScannedTime = now;
+
+      // 演出
+      playSuccessBeep();
+      triggerVibration();
+
+      // カードフラッシュ演出
+      resultCard.classList.remove('success-flash');
+      void resultCard.offsetWidth;
+      resultCard.classList.add('success-flash');
+
+      const timestamp = new Date().toISOString();
+      const item = {
+        id: 'scan_' + now + '_' + Math.random().toString(36).substring(2, 6),
+        type: type,
+        tagText: trimmedText,
+        uid: uid || '',
+        timestamp: timestamp,
+        status: 'pending'
+      };
+
+      // UI更新
+      updateLatestUI(item);
+      scanQueue.unshift(item);
+      saveQueue();
+      renderHistoryList();
+      updateStatsUI();
+
+      // スプレッドシートへ直接書き込み（GAS連携）
+      sendDataToSpreadsheet(item);
+    }
+
+    // --- Google Apps Script (GAS) へのデータ送信 ---
+    function sendDataToSpreadsheet(item) {
+      if (typeof google === 'undefined' || !google.script || !google.script.run) {
+        console.warn("google.script.runが利用できない環境です（ローカルテスト等）");
+        item.status = 'synced';
+        totalSyncedCount++;
+        saveQueue();
+        updateLatestSyncStatus(item);
+        renderHistoryList();
+        updateStatsUI();
+        return;
+      }
+
+      // GASのサーバー側関数 saveScanData をダイレクトに呼び出し！
+      google.script.run
+        .withSuccessHandler(function(response) {
+          if (response && response.status === 'success') {
+            item.status = 'synced';
+            totalSyncedCount++;
+            localStorage.setItem('multi_scan_synced_count_v02', totalSyncedCount.toString());
+            saveQueue();
+            updateLatestSyncStatus(item, `✅ 完了 (行: ${response.row})`);
+            renderHistoryList();
+            updateStatsUI();
+          } else {
+            item.status = 'error';
+            saveQueue();
+            updateLatestSyncStatus(item, '❌ エラー');
+            renderHistoryList();
+          }
+        })
+        .withFailureHandler(function(error) {
+          item.status = 'error';
+          saveQueue();
+          updateLatestSyncStatus(item, '❌ 通信失敗');
+          renderHistoryList();
+        })
+        .saveScanData({
+          timestamp: item.timestamp,
+          tagText: item.tagText,
+          type: item.type,
+          uid: item.uid
+        });
+    }
+
+    function updateLatestUI(item) {
+      latestTypeBadge.textContent = item.type;
+      latestTypeBadge.className = `type-badge ${item.type.toLowerCase()}`;
+      latestDataText.textContent = item.tagText || '(UIDのみ)';
+      latestUidText.textContent = item.uid ? `UID: ${item.uid}` : '';
+
+      const timeStr = new Date(item.timestamp).toLocaleTimeString('ja-JP', {
+        hour: '2-digit', minute: '2-digit', second: '2-digit'
+      });
+      latestTime.textContent = timeStr;
+      latestSyncStatus.textContent = '送信中...';
+      latestSyncStatus.className = 'result-sync status-waiting';
+
+      if (item.type === 'NFC') {
+        resultCard.classList.add('nfc-active');
+      } else {
+        resultCard.classList.remove('nfc-active');
+      }
+    }
+
+    function updateLatestSyncStatus(item, customText) {
+      if (customText) {
+        latestSyncStatus.textContent = customText;
+      } else if (item.status === 'synced') {
+        latestSyncStatus.textContent = '✅ 送信完了';
+        latestSyncStatus.className = 'result-sync status-synced';
+      } else if (item.status === 'error') {
+        latestSyncStatus.textContent = '❌ エラー';
+        latestSyncStatus.className = 'result-sync status-error';
+      }
+    }
+
+    function saveQueue() {
+      localStorage.setItem('multi_scan_queue_v02', JSON.stringify(scanQueue.slice(0, 50)));
+    }
+
+    function updateStatsUI() {
+      const pendingCount = scanQueue.filter(i => i.status === 'pending' || i.status === 'error').length;
+      pendingCountEl.textContent = pendingCount;
+      syncedCountEl.textContent = totalSyncedCount;
+
+      if (retryUnsyncedBtn && retryCount) {
+        if (pendingCount > 0) {
+          retryUnsyncedBtn.style.display = 'inline-block';
+          retryCount.textContent = pendingCount;
+        } else {
+          retryUnsyncedBtn.style.display = 'none';
+        }
+      }
+    }
+
+    function renderHistoryList() {
+      if (scanQueue.length === 0) {
+        historyEmpty.style.display = 'block';
+        historyList.innerHTML = '';
+        return;
+      }
+      historyEmpty.style.display = 'none';
+      historyList.innerHTML = '';
+
+      scanQueue.slice(0, 10).forEach(item => {
+        const li = document.createElement('li');
+        li.className = 'history-item';
+        const timeStr = new Date(item.timestamp).toLocaleTimeString('ja-JP', {
+          hour: '2-digit', minute: '2-digit', second: '2-digit'
+        });
+        const isSynced = item.status === 'synced';
+        let statusIcon = '⏳';
+        if (isSynced) {
+          statusIcon = '✅';
+        } else if (item.status === 'error') {
+          statusIcon = `<button class="text-link-btn" style="color: var(--danger, #ef4444); font-size: 0.75rem; text-decoration: underline; cursor: pointer;" onclick="window.retryItem('${item.id}')" title="クリックして再送">❌ 再送</button>`;
+        }
+        const typeLower = item.type.toLowerCase();
+
+        li.innerHTML = `
+          <div class="history-item-left">
+            <span class="history-badge ${typeLower}">${item.type}</span>
+            <div class="history-info">
+              <span class="history-text">${escapeHtml(item.tagText)}</span>
+              <span class="history-sub">${timeStr} ${item.uid ? '| UID: ' + escapeHtml(item.uid) : ''}</span>
+            </div>
+          </div>
+          <div class="history-status">${statusIcon}</div>
+        `;
+        historyList.appendChild(li);
+      });
+    }
+
+    function escapeHtml(str) {
+      if (!str) return '';
+      return str.replace(/[&<>"']/g, m => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+      }[m]));
+    }
+
+    // --- タブ切り替え ---
+    tabQr.addEventListener('click', () => {
+      if (currentMode === 'QR') return;
+      currentMode = 'QR';
+      tabQr.classList.add('active');
+      tabQr.setAttribute('aria-selected', 'true');
+      tabNfc.classList.remove('active');
+      tabNfc.setAttribute('aria-selected', 'false');
+
+      qrSection.classList.add('active');
+      nfcSection.classList.remove('active');
+
+      stopNfcScanner();
+      startQrScanner();
+    });
+
+    tabNfc.addEventListener('click', () => {
+      if (currentMode === 'NFC') return;
+      currentMode = 'NFC';
+      tabNfc.classList.add('active');
+      tabNfc.setAttribute('aria-selected', 'true');
+      tabQr.classList.remove('active');
+      tabQr.setAttribute('aria-selected', 'false');
+
+      nfcSection.classList.add('active');
+      qrSection.classList.remove('active');
+
+      stopQrScanner();
+      startNfcScanner();
+    });
+
+    // --- QRカメラ制御 ---
+    async function startQrScanner() {
+      if (isQrScanning) return;
+      try {
+        if (!html5QrScanner) {
+          html5QrScanner = new Html5Qrcode("qrReader");
+        }
+        const config = {
+          fps: 15,
+          qrbox: { width: 220, height: 220 },
+          aspectRatio: 1.0
+        };
+
+        await html5QrScanner.start(
+          { facingMode: currentFacingMode },
+          config,
+          (decodedText) => {
+            handleScanSuccess('QR', decodedText, '');
+          },
+          () => {} // スキャン中の非認識フレームは無視
+        );
+
+        isQrScanning = true;
+        qrBtnIcon.textContent = '⏸️';
+        qrBtnText.textContent = '一時停止';
+        toggleQrScanBtn.className = 'control-btn primary';
+      } catch (err) {
+        console.warn("カメラ起動エラー:", err);
+        qrBtnIcon.textContent = '▶️';
+        qrBtnText.textContent = 'カメラ起動';
+        toggleQrScanBtn.className = 'control-btn secondary';
+      }
+    }
+
+    async function stopQrScanner() {
+      if (!isQrScanning || !html5QrScanner) return;
+      try {
+        await html5QrScanner.stop();
+      } catch (e) {}
+      isQrScanning = false;
+      qrBtnIcon.textContent = '▶️';
+      qrBtnText.textContent = '再開';
+      toggleQrScanBtn.className = 'control-btn secondary';
+    }
+
+    toggleQrScanBtn.addEventListener('click', () => {
+      if (isQrScanning) stopQrScanner();
+      else startQrScanner();
+    });
+
+    toggleCameraFacingBtn.addEventListener('click', async () => {
+      currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+      if (isQrScanning) {
+        await stopQrScanner();
+        await startQrScanner();
+      }
+    });
+
+    // --- NFCリーダー制御 ---
+    async function startNfcScanner() {
+      if (!('NDEFReader' in window)) {
+        nfcHintText.innerHTML = '<span style="color: var(--warning)">⚠️ このブラウザはWeb NFCに未対応です。<br>Android版Chromeでお試しください。</span>';
+        nfcBtnText.textContent = 'NFC非対応';
+        nfcBtnIcon.textContent = '❌';
+        return;
+      }
+
+      try {
+        if (!ndefReader) ndefReader = new NDEFReader();
+        await ndefReader.scan();
+        isNfcScanning = true;
+        nfcHintText.textContent = 'カードをスマートフォン背面にタッチしてください';
+        nfcBtnText.textContent = 'NFC待機中...';
+        nfcBtnIcon.textContent = '📡';
+
+        ndefReader.onreading = event => {
+          let textData = '';
+          const uid = event.serialNumber || '';
+
+          if (event.message && event.message.records) {
+            for (const record of event.message.records) {
+              if (record.recordType === 'text') {
+                const textDecoder = new TextDecoder(record.encoding || 'utf-8');
+                textData = textDecoder.decode(record.data);
+                break;
+              }
+            }
+          }
+          handleScanSuccess('NFC', textData, uid);
+        };
+
+        ndefReader.onreadingerror = () => {
+          nfcHintText.textContent = '読み取りに失敗しました。もう一度かざしてください。';
+        };
+      } catch (err) {
+        nfcHintText.innerHTML = `<span style="color: var(--danger)">NFC起動エラー: ${err.message}</span>`;
+      }
+    }
+
+    function stopNfcScanner() {
+      isNfcScanning = false;
+    }
+
+    // --- 未送信データの再送処理 ---
+    if (retryUnsyncedBtn) {
+      retryUnsyncedBtn.addEventListener('click', () => {
+        const unsent = scanQueue.filter(i => i.status === 'pending' || i.status === 'error');
+        if (unsent.length === 0) return;
+        retryUnsyncedBtn.disabled = true;
+        retryUnsyncedBtn.textContent = '再送中...';
+        
+        unsent.forEach(item => {
+          item.status = 'pending';
+          sendDataToSpreadsheet(item);
+        });
+
+        setTimeout(() => {
+          retryUnsyncedBtn.disabled = false;
+          updateStatsUI();
+        }, 1500);
+      });
+    }
+
+    window.retryItem = function(id) {
+      const item = scanQueue.find(i => i.id === id);
+      if (item) {
+        item.status = 'pending';
+        updateLatestSyncStatus(item, '再送中...');
+        renderHistoryList();
+        sendDataToSpreadsheet(item);
+      }
+    };
+
+    // --- 履歴クリア ---
+    clearHistoryBtn.addEventListener('click', () => {
+      if (confirm('スキャン履歴表示をクリアしますか？（スプレッドシートのデータは消えません）')) {
+        scanQueue = [];
+        localStorage.removeItem('multi_scan_queue_v02');
+        renderHistoryList();
+        updateStatsUI();
+      }
+    });
+
+    // --- 設定モーダル制御 ---
+    openSettingsBtn.addEventListener('click', () => {
+      soundToggle.checked = enableSound;
+      vibrateToggle.checked = enableVibrate;
+      settingsModal.classList.add('open');
+    });
+
+    closeSettingsBtn.addEventListener('click', () => {
+      settingsModal.classList.remove('open');
+    });
+
+    settingsModal.addEventListener('click', e => {
+      if (e.target === settingsModal) settingsModal.classList.remove('open');
+    });
+
+    saveSettingsBtn.addEventListener('click', () => {
+      enableSound = soundToggle.checked;
+      localStorage.setItem('multi_scan_sound', enableSound.toString());
+      enableVibrate = vibrateToggle.checked;
+      localStorage.setItem('multi_scan_vibrate', enableVibrate.toString());
+      settingsModal.classList.remove('open');
+      alert('設定を保存しました！');
+    });
+
+    // テスト書き込み
+    testConnectionBtn.addEventListener('click', () => {
+      testConnectionBtn.disabled = true;
+      testConnectionBtn.textContent = '書き込み中...';
+
+      const dummyItem = {
+        id: 'test_' + Date.now(),
+        type: 'TEST',
+        tagText: 'テスト送信 (接続確認 v02)',
+        uid: 'TEST_UID_002',
+        timestamp: new Date().toISOString(),
+        status: 'pending'
+      };
+
+      updateLatestUI(dummyItem);
+      scanQueue.unshift(dummyItem);
+      saveQueue();
+      renderHistoryList();
+      updateStatsUI();
+
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(function(res) {
+            testConnectionBtn.disabled = false;
+            testConnectionBtn.textContent = 'テスト書き込み実行';
+            if (res && res.status === 'success') {
+              dummyItem.status = 'synced';
+              totalSyncedCount++;
+              localStorage.setItem('multi_scan_synced_count_v02', totalSyncedCount.toString());
+              saveQueue();
+              updateLatestSyncStatus(dummyItem, `✅ 成功 (行: ${res.row})`);
+              renderHistoryList();
+              updateStatsUI();
+              alert(`スプレッドシートの I列〜L列 (行番号: ${res.row}) への書き込みが成功しました！`);
+            } else {
+              alert('書き込みエラー: ' + (res ? res.message : '不明なエラー'));
+            }
+          })
+          .withFailureHandler(function(err) {
+            testConnectionBtn.disabled = false;
+            testConnectionBtn.textContent = 'テスト書き込み実行';
+            alert('GAS通信エラー: ' + err.toString());
+          })
+          .saveScanData({
+            timestamp: dummyItem.timestamp,
+            tagText: dummyItem.tagText,
+            type: dummyItem.type,
+            uid: dummyItem.uid
+          });
+      } else {
+        testConnectionBtn.disabled = false;
+        testConnectionBtn.textContent = 'テスト書き込み実行';
+        alert('GAS環境外でのテストです。スプレッドシート内で実行してください。');
+      }
+    });
+
+    // 初期化
+    window.addEventListener('DOMContentLoaded', () => {
+      updateStatsUI();
+      renderHistoryList();
+      startQrScanner();
+    });
+  </script>
+</body>
+</html>
