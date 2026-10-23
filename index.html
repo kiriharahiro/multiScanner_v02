@@ -975,9 +975,10 @@
         </div>
 
         <div class="modal-actions">
-          <button id="testConnectionBtn" class="control-btn secondary">テスト書き込み実行</button>
-          <button id="saveSettingsBtn" class="control-btn primary">設定を保存</button>
+          <button type="button" id="testConnectionBtn" class="control-btn secondary">テスト書き込み実行</button>
+          <button type="button" id="saveSettingsBtn" class="control-btn primary">設定を保存</button>
         </div>
+        <div id="testResultMsg" style="margin-top: 10px; font-size: 0.8rem; text-align: center; padding: 8px; border-radius: 8px; display: none;"></div>
       </div>
     </div>
   </div>
@@ -1033,6 +1034,7 @@
     const vibrateToggle = document.getElementById('vibrateToggle');
     const testConnectionBtn = document.getElementById('testConnectionBtn');
     const saveSettingsBtn = document.getElementById('saveSettingsBtn');
+    const testResultMsg = document.getElementById('testResultMsg');
 
     // 状態管理
     let currentMode = 'QR';
@@ -1586,6 +1588,7 @@
       soundToggle.checked = enableSound;
       vibrateToggle.checked = enableVibrate;
       if (gasUrlInput) gasUrlInput.value = gasUrl;
+      if (testResultMsg) testResultMsg.style.display = 'none';
       settingsModal.classList.add('open');
     });
 
@@ -1614,9 +1617,37 @@
     });
 
     // テスト書き込み
-    testConnectionBtn.addEventListener('click', async () => {
+    testConnectionBtn.addEventListener('click', async (e) => {
+      e.preventDefault();
+      
+      // 1. 入力欄に入力されたURLを即座に自動取得＆保存
+      if (gasUrlInput && gasUrlInput.value.trim()) {
+        gasUrl = gasUrlInput.value.trim();
+        localStorage.setItem('multi_scan_gas_url_v02', gasUrl);
+        updateConnectionBadge();
+      }
+
+      if (testResultMsg) {
+        testResultMsg.style.display = 'block';
+        testResultMsg.style.background = 'rgba(99, 102, 241, 0.2)';
+        testResultMsg.style.color = '#a5b4fc';
+        testResultMsg.textContent = '⏳ スプレッドシートへ送信中...';
+      }
+
       testConnectionBtn.disabled = true;
       testConnectionBtn.textContent = '書き込み中...';
+
+      // URL未設定チェック
+      if (!gasUrl && (typeof google === 'undefined' || !google.script || !google.script.run)) {
+        testConnectionBtn.disabled = false;
+        testConnectionBtn.textContent = 'テスト書き込み実行';
+        if (testResultMsg) {
+          testResultMsg.style.background = 'rgba(239, 68, 68, 0.2)';
+          testResultMsg.style.color = '#fca5a5';
+          testResultMsg.textContent = '⚠️ GAS WebアプリURLが未入力です。上の枠に貼り付けてください。';
+        }
+        return;
+      }
 
       const dummyItem = {
         id: 'test_' + Date.now(),
@@ -1647,15 +1678,27 @@
               updateLatestSyncStatus(dummyItem, `✅ 成功 (行: ${res.row})`);
               renderHistoryList();
               updateStatsUI();
-              alert(`スプレッドシートの I列〜L列 (行番号: ${res.row}) への書き込みが成功しました！`);
+              if (testResultMsg) {
+                testResultMsg.style.background = 'rgba(16, 185, 129, 0.2)';
+                testResultMsg.style.color = '#6ee7b7';
+                testResultMsg.textContent = `✅ 書き込み成功！ (行番号: ${res.row})`;
+              }
             } else {
-              alert('書き込みエラー: ' + (res ? res.message : '不明なエラー'));
+              if (testResultMsg) {
+                testResultMsg.style.background = 'rgba(239, 68, 68, 0.2)';
+                testResultMsg.style.color = '#fca5a5';
+                testResultMsg.textContent = '❌ エラー: ' + (res ? res.message : '不明');
+              }
             }
           })
           .withFailureHandler(function(err) {
             testConnectionBtn.disabled = false;
             testConnectionBtn.textContent = 'テスト書き込み実行';
-            alert('GAS通信エラー: ' + err.toString());
+            if (testResultMsg) {
+              testResultMsg.style.background = 'rgba(239, 68, 68, 0.2)';
+              testResultMsg.style.color = '#fca5a5';
+              testResultMsg.textContent = '❌ GAS通信エラー: ' + err.toString();
+            }
           })
           .saveScanData({
             timestamp: dummyItem.timestamp,
@@ -1663,8 +1706,8 @@
             type: dummyItem.type,
             uid: dummyItem.uid
           });
-      } else if (gasUrl) {
-        // 外部ホスティング環境
+      } else {
+        // 外部ホスティング環境 (fetch POST)
         try {
           await fetch(gasUrl, {
             method: 'POST',
@@ -1688,16 +1731,20 @@
 
           testConnectionBtn.disabled = false;
           testConnectionBtn.textContent = 'テスト書き込み実行';
-          alert('スプレッドシートへテストデータを送信しました！スプレッドシート（I〜L列）をご確認ください。');
+          if (testResultMsg) {
+            testResultMsg.style.background = 'rgba(16, 185, 129, 0.2)';
+            testResultMsg.style.color = '#6ee7b7';
+            testResultMsg.textContent = '✅ 送信完了！スプレッドシートをご確認ください。';
+          }
         } catch (err) {
           testConnectionBtn.disabled = false;
           testConnectionBtn.textContent = 'テスト書き込み実行';
-          alert('通信エラー: ' + err.message);
+          if (testResultMsg) {
+            testResultMsg.style.background = 'rgba(239, 68, 68, 0.2)';
+            testResultMsg.style.color = '#fca5a5';
+            testResultMsg.textContent = '❌ 通信失敗: ' + err.message;
+          }
         }
-      } else {
-        testConnectionBtn.disabled = false;
-        testConnectionBtn.textContent = 'テスト書き込み実行';
-        alert('GAS WebアプリURLが設定されていません。上の入力欄にURLを設定してください。');
       }
     });
 
