@@ -1,13 +1,14 @@
-﻿# multiScanner_v02: QR・NFC ハイブリッドスキャナー (完全組織内運用版)
+# multiScanner_v02: QR・NFC ハイブリッドスキャナー (完全組織内運用版)
 
 Google Apps Script (GAS) 内に完全統合された、教育機関・組織内限定運用のためのハイブリッドスキャナーWebアプリケーションです。
 
 ## 構成ファイル
 
-- [**Code.gs**](file:///g:/共有ドライブ/KiriPlayPark/Tool/Antigravity/kiriplaypark-projects/multiScanner_v02/Code.gs): サーバー側スクリプト（`doGet`, `saveScanData`, `testWrite` / 排他制御付き）
-- [**Index.html**](file:///g:/共有ドライブ/KiriPlayPark/Tool/Antigravity/kiriplaypark-projects/multiScanner_v02/Index.html): クライアント側UI（HTML + CSS + JavaScript統合 / オフラインキュー＆再送対応）
-- [**操作手順書.md**](file:///g:/共有ドライブ/KiriPlayPark/Tool/Antigravity/kiriplaypark-projects/multiScanner_v02/操作手順書.md): スプレッドシートへの導入・デプロイ・汎用運用マニュアル
-- [**.gitignore**](file:///g:/共有ドライブ/KiriPlayPark/Tool/Antigravity/kiriplaypark-projects/multiScanner_v02/.gitignore): 組織内本番手順書・実業務データ・AI対話生ログ等の漏洩防止設定
+- [**システム仕様書.md**](file:///h:/共有ドライブ/KiriPlayPark/Tool/Antigravity/kiriplaypark-projects/multiScanner_v02/システム仕様書.md): システムの全体設計・データ仕様・詳細機能仕様書
+- [**Code.gs**](file:///h:/共有ドライブ/KiriPlayPark/Tool/Antigravity/kiriplaypark-projects/multiScanner_v02/Code.gs): サーバー側スクリプト（`doGet`, `saveScanData`, `testWrite` / 排他制御付き）
+- [**Index.html**](file:///h:/共有ドライブ/KiriPlayPark/Tool/Antigravity/kiriplaypark-projects/multiScanner_v02/Index.html): クライアント側UI（HTML + CSS + JavaScript統合 / オフラインキュー＆再送対応）
+- [**操作手順書.md**](file:///h:/共有ドライブ/KiriPlayPark/Tool/Antigravity/kiriplaypark-projects/multiScanner_v02/操作手順書.md): スプレッドシートへの導入・デプロイ・汎用運用マニュアル
+- [**.gitignore**](file:///h:/共有ドライブ/KiriPlayPark/Tool/Antigravity/kiriplaypark-projects/multiScanner_v02/.gitignore): 組織内本番手順書・実業務データ・AI対話生ログ等の漏洩防止設定
 
 ## 主な特徴
 

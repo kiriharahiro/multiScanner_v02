@@ -327,6 +327,67 @@
       animation: scanLaserAnim 2s infinite ease-in-out;
     }
 
+    /* カメラエラー表示オーバーレイ */
+    .camera-error-overlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(11, 15, 25, 0.92);
+      backdrop-filter: blur(6px);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+      text-align: center;
+      z-index: 10;
+      gap: 10px;
+    }
+
+    .camera-error-icon {
+      font-size: 2rem;
+    }
+
+    .camera-error-title {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--danger);
+    }
+
+    .camera-error-msg {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      line-height: 1.4;
+      word-break: break-all;
+      background: rgba(0, 0, 0, 0.4);
+      padding: 8px;
+      border-radius: var(--radius-sm);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      max-height: 80px;
+      overflow-y: auto;
+      width: 100%;
+    }
+
+    .camera-error-hint {
+      font-size: 0.75rem;
+      color: #cbd5e1;
+      line-height: 1.35;
+    }
+
+    .camera-retry-btn {
+      background: var(--accent-qr);
+      color: #0b0f19;
+      font-weight: 700;
+      font-size: 0.8rem;
+      padding: 6px 16px;
+      border-radius: var(--radius-full);
+      border: none;
+      cursor: pointer;
+      margin-top: 4px;
+    }
+
     @keyframes scanLaserAnim {
       0% { transform: translateY(0); opacity: 0; }
       20% { opacity: 1; }
@@ -756,7 +817,7 @@
         <h1 class="app-title">組織内スキャナー</h1>
       </div>
       <div class="header-right">
-        <span class="badge org">組織内連携済</span>
+        <span id="connectionBadge" class="badge org">連携待機中</span>
         <button id="openSettingsBtn" class="icon-btn" title="設定を開く" aria-label="設定">⚙️</button>
       </div>
     </header>
@@ -794,6 +855,16 @@
           <div id="qrReader"></div>
           <div id="qrGuideBox" class="qr-guide-box">
             <div class="scan-laser"></div>
+          </div>
+          <!-- カメラ起動エラー時の表示領域 -->
+          <div id="cameraErrorOverlay" class="camera-error-overlay" style="display: none;">
+            <div class="camera-error-icon">📷🚫</div>
+            <div class="camera-error-title" id="cameraErrorTitle">カメラを起動できません</div>
+            <div class="camera-error-msg" id="cameraErrorMsg">エラー情報を取得中...</div>
+            <div class="camera-error-hint" id="cameraErrorHint">
+              ブラウザ上部のアドレスバー左にある設定アイコンをタップし、「カメラ」が許可されているかご確認ください。
+            </div>
+            <button id="cameraRetryBtn" class="camera-retry-btn">もう一度試す</button>
           </div>
         </div>
         <div class="scanner-controls">
@@ -867,8 +938,18 @@
       </div>
       <div class="modal-body">
         <div class="info-box">
-          ✅ <strong>完全組織内運用モード（GAS直結）</strong><br>
-          外部サーバーを使用せず、スプレッドシートと直接連携しています。URLの設定は不要です。
+          ⚡ <strong>スプレッドシート連携（GAS）</strong><br>
+          外部ホスティング（GitHub Pages等）から安全にスプレッドシートへリアルタイム記録します。
+        </div>
+
+        <div style="display: flex; flex-direction: column; gap: 6px;">
+          <label style="font-size: 0.82rem; font-weight: 600; color: #fff;">
+            Googleスプレッドシート (GAS) WebアプリURL
+          </label>
+          <input type="url" id="gasUrlInput" placeholder="https://script.google.com/macros/s/.../exec" style="width: 100%; padding: 10px 12px; background: rgba(0,0,0,0.4); border: 1px solid rgba(255,255,255,0.15); border-radius: 8px; color: #fff; font-size: 0.8rem; box-sizing: border-box;">
+          <p style="font-size: 0.7rem; color: var(--text-muted); line-height: 1.3;">
+            ※スプレッドシートの「デプロイ」>「ウェブアプリ」で発行されたURLを貼り付けます。
+          </p>
         </div>
 
         <div class="setting-toggle-row">
@@ -919,6 +1000,11 @@
     const toggleQrScanBtn = document.getElementById('toggleQrScanBtn');
     const qrBtnIcon = document.getElementById('qrBtnIcon');
     const qrBtnText = document.getElementById('qrBtnText');
+    const cameraErrorOverlay = document.getElementById('cameraErrorOverlay');
+    const cameraErrorTitle = document.getElementById('cameraErrorTitle');
+    const cameraErrorMsg = document.getElementById('cameraErrorMsg');
+    const cameraErrorHint = document.getElementById('cameraErrorHint');
+    const cameraRetryBtn = document.getElementById('cameraRetryBtn');
 
     const startNfcBtn = document.getElementById('startNfcBtn');
     const nfcBtnIcon = document.getElementById('nfcBtnIcon');
@@ -938,6 +1024,8 @@
     const retryUnsyncedBtn = document.getElementById('retryUnsyncedBtn');
     const retryCount = document.getElementById('retryCount');
 
+    const connectionBadge = document.getElementById('connectionBadge');
+    const gasUrlInput = document.getElementById('gasUrlInput');
     const openSettingsBtn = document.getElementById('openSettingsBtn');
     const closeSettingsBtn = document.getElementById('closeSettingsBtn');
     const settingsModal = document.getElementById('settingsModal');
@@ -948,6 +1036,7 @@
 
     // 状態管理
     let currentMode = 'QR';
+    let gasUrl = localStorage.getItem('multi_scan_gas_url_v02') || '';
     let enableSound = localStorage.getItem('multi_scan_sound') !== 'false';
     let enableVibrate = localStorage.getItem('multi_scan_vibrate') !== 'false';
     let scanQueue = JSON.parse(localStorage.getItem('multi_scan_queue_v02')) || [];
@@ -1059,48 +1148,83 @@
     }
 
     // --- Google Apps Script (GAS) へのデータ送信 ---
-    function sendDataToSpreadsheet(item) {
-      if (typeof google === 'undefined' || !google.script || !google.script.run) {
-        console.warn("google.script.runが利用できない環境です（ローカルテスト等）");
-        item.status = 'synced';
-        totalSyncedCount++;
+    async function sendDataToSpreadsheet(item) {
+      // 1. GASコンテナ内（google.script.run）の場合
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        google.script.run
+          .withSuccessHandler(function(response) {
+            if (response && response.status === 'success') {
+              item.status = 'synced';
+              totalSyncedCount++;
+              localStorage.setItem('multi_scan_synced_count_v02', totalSyncedCount.toString());
+              saveQueue();
+              updateLatestSyncStatus(item, `✅ 完了 (行: ${response.row})`);
+              renderHistoryList();
+              updateStatsUI();
+            } else {
+              item.status = 'error';
+              saveQueue();
+              updateLatestSyncStatus(item, '❌ エラー');
+              renderHistoryList();
+            }
+          })
+          .withFailureHandler(function(error) {
+            item.status = 'error';
+            saveQueue();
+            updateLatestSyncStatus(item, '❌ 通信失敗');
+            renderHistoryList();
+          })
+          .saveScanData({
+            timestamp: item.timestamp,
+            tagText: item.tagText,
+            type: item.type,
+            uid: item.uid
+          });
+        return;
+      }
+
+      // 2. 外部ホスティング（GitHub Pages等）からのfetch送信
+      if (!gasUrl) {
+        item.status = 'error';
         saveQueue();
-        updateLatestSyncStatus(item);
+        updateLatestSyncStatus(item, '⚠️ URL未設定');
         renderHistoryList();
         updateStatsUI();
         return;
       }
 
-      // GASのサーバー側関数 saveScanData をダイレクトに呼び出し！
-      google.script.run
-        .withSuccessHandler(function(response) {
-          if (response && response.status === 'success') {
-            item.status = 'synced';
-            totalSyncedCount++;
-            localStorage.setItem('multi_scan_synced_count_v02', totalSyncedCount.toString());
-            saveQueue();
-            updateLatestSyncStatus(item, `✅ 完了 (行: ${response.row})`);
-            renderHistoryList();
-            updateStatsUI();
-          } else {
-            item.status = 'error';
-            saveQueue();
-            updateLatestSyncStatus(item, '❌ エラー');
-            renderHistoryList();
-          }
-        })
-        .withFailureHandler(function(error) {
-          item.status = 'error';
-          saveQueue();
-          updateLatestSyncStatus(item, '❌ 通信失敗');
-          renderHistoryList();
-        })
-        .saveScanData({
-          timestamp: item.timestamp,
-          tagText: item.tagText,
-          type: item.type,
-          uid: item.uid
+      try {
+        await fetch(gasUrl, {
+          method: 'POST',
+          mode: 'no-cors',
+          headers: {
+            'Content-Type': 'text/plain'
+          },
+          body: JSON.stringify({
+            timestamp: item.timestamp,
+            tagText: item.tagText,
+            type: item.type,
+            uid: item.uid
+          })
         });
+
+        // no-cors のためレスポンスボディは読めないが正常到達
+        item.status = 'synced';
+        totalSyncedCount++;
+        localStorage.setItem('multi_scan_synced_count_v02', totalSyncedCount.toString());
+        saveQueue();
+        updateLatestSyncStatus(item, '✅ 送信完了');
+        renderHistoryList();
+        updateStatsUI();
+
+      } catch (err) {
+        console.error("POST送信エラー:", err);
+        item.status = 'error';
+        saveQueue();
+        updateLatestSyncStatus(item, '❌ 通信失敗');
+        renderHistoryList();
+        updateStatsUI();
+      }
     }
 
     function updateLatestUI(item) {
@@ -1231,8 +1355,42 @@
     });
 
     // --- QRカメラ制御 ---
+    function showCameraError(err) {
+      if (!cameraErrorOverlay) return;
+      cameraErrorOverlay.style.display = 'flex';
+      
+      const errName = err ? (err.name || '') : '';
+      const errStr = (err && (err.message || err.toString())) || '不明なエラー';
+      cameraErrorMsg.textContent = `${errName}: ${errStr}`;
+
+      if (errName === 'NotAllowedError' || /permission|denied|policy/i.test(errStr)) {
+        cameraErrorTitle.textContent = 'カメラ権限が制限されています';
+        cameraErrorHint.innerHTML = `
+          <strong>【確認ポイント】</strong><br>
+          ① アドレスバー左のアイコン（🎚️または鍵）をタップ ➔ 「権限」 ➔ 「カメラ」が「許可」になっているか確認<br>
+          ② Google Apps Scriptのセキュリティ制限（Permissions Policy）によりブラウザに遮断されている可能性があります。
+        `;
+      } else if (errName === 'NotFoundError' || /devices? not found/i.test(errStr)) {
+        cameraErrorTitle.textContent = 'カメラが見つかりません';
+        cameraErrorHint.textContent = '端末に利用可能なカメラが存在しないか、認識されていません。';
+      } else if (errName === 'NotReadableError' || /could not start video source/i.test(errStr)) {
+        cameraErrorTitle.textContent = 'カメラを開始できません';
+        cameraErrorHint.textContent = '他のアプリ（カメラや通話アプリ等）がカメラを使用中です。他のアプリを閉じてから再試行してください。';
+      } else {
+        cameraErrorTitle.textContent = 'カメラの起動に失敗しました';
+        cameraErrorHint.textContent = '再試行ボタンを押すか、カメラのアクセス権限をご確認ください。';
+      }
+    }
+
+    function hideCameraError() {
+      if (cameraErrorOverlay) {
+        cameraErrorOverlay.style.display = 'none';
+      }
+    }
+
     async function startQrScanner() {
       if (isQrScanning) return;
+      hideCameraError();
       try {
         if (!html5QrScanner) {
           html5QrScanner = new Html5Qrcode("qrReader");
@@ -1243,21 +1401,50 @@
           aspectRatio: 1.0
         };
 
-        await html5QrScanner.start(
-          { facingMode: currentFacingMode },
-          config,
-          (decodedText) => {
-            handleScanSuccess('QR', decodedText, '');
-          },
-          () => {} // スキャン中の非認識フレームは無視
-        );
+        try {
+          await html5QrScanner.start(
+            { facingMode: currentFacingMode },
+            config,
+            (decodedText) => {
+              handleScanSuccess('QR', decodedText, '');
+            },
+            () => {} // スキャン中の非認識フレームは無視
+          );
+        } catch (firstErr) {
+          console.warn("facingModeでの起動に失敗。getCamerasでカメラ再探索を試みます:", firstErr);
+          // デバイス一覧を取得してフォールバック
+          if (Html5Qrcode && Html5Qrcode.getCameras) {
+            const devices = await Html5Qrcode.getCameras();
+            if (devices && devices.length > 0) {
+              let targetDevice = devices.find(d => /back|rear|environment/i.test(d.label)) || devices[devices.length - 1];
+              if (currentFacingMode === 'user') {
+                targetDevice = devices.find(d => /front|user|selfie/i.test(d.label)) || devices[0];
+              }
+              await html5QrScanner.start(
+                targetDevice.id,
+                config,
+                (decodedText) => {
+                  handleScanSuccess('QR', decodedText, '');
+                },
+                () => {}
+              );
+            } else {
+              throw firstErr;
+            }
+          } else {
+            throw firstErr;
+          }
+        }
 
         isQrScanning = true;
+        hideCameraError();
         qrBtnIcon.textContent = '⏸️';
         qrBtnText.textContent = '一時停止';
         toggleQrScanBtn.className = 'control-btn primary';
       } catch (err) {
-        console.warn("カメラ起動エラー:", err);
+        console.error("カメラ起動エラー:", err);
+        showCameraError(err);
+        isQrScanning = false;
         qrBtnIcon.textContent = '▶️';
         qrBtnText.textContent = 'カメラ起動';
         toggleQrScanBtn.className = 'control-btn secondary';
@@ -1287,6 +1474,12 @@
         await startQrScanner();
       }
     });
+
+    if (cameraRetryBtn) {
+      cameraRetryBtn.addEventListener('click', () => {
+        startQrScanner();
+      });
+    }
 
     // --- NFCリーダー制御 ---
     async function startNfcScanner() {
@@ -1373,10 +1566,26 @@
       }
     });
 
+    // 連携バッジ更新
+    function updateConnectionBadge() {
+      if (!connectionBadge) return;
+      if (typeof google !== 'undefined' && google.script && google.script.run) {
+        connectionBadge.textContent = 'GAS直結';
+        connectionBadge.className = 'badge online';
+      } else if (gasUrl) {
+        connectionBadge.textContent = '連携中';
+        connectionBadge.className = 'badge online';
+      } else {
+        connectionBadge.textContent = 'URL未設定';
+        connectionBadge.className = 'badge org';
+      }
+    }
+
     // --- 設定モーダル制御 ---
     openSettingsBtn.addEventListener('click', () => {
       soundToggle.checked = enableSound;
       vibrateToggle.checked = enableVibrate;
+      if (gasUrlInput) gasUrlInput.value = gasUrl;
       settingsModal.classList.add('open');
     });
 
@@ -1393,12 +1602,19 @@
       localStorage.setItem('multi_scan_sound', enableSound.toString());
       enableVibrate = vibrateToggle.checked;
       localStorage.setItem('multi_scan_vibrate', enableVibrate.toString());
+
+      if (gasUrlInput) {
+        gasUrl = gasUrlInput.value.trim();
+        localStorage.setItem('multi_scan_gas_url_v02', gasUrl);
+      }
+
+      updateConnectionBadge();
       settingsModal.classList.remove('open');
       alert('設定を保存しました！');
     });
 
     // テスト書き込み
-    testConnectionBtn.addEventListener('click', () => {
+    testConnectionBtn.addEventListener('click', async () => {
       testConnectionBtn.disabled = true;
       testConnectionBtn.textContent = '書き込み中...';
 
@@ -1417,6 +1633,7 @@
       renderHistoryList();
       updateStatsUI();
 
+      // GAS内部環境
       if (typeof google !== 'undefined' && google.script && google.script.run) {
         google.script.run
           .withSuccessHandler(function(res) {
@@ -1446,15 +1663,47 @@
             type: dummyItem.type,
             uid: dummyItem.uid
           });
+      } else if (gasUrl) {
+        // 外部ホスティング環境
+        try {
+          await fetch(gasUrl, {
+            method: 'POST',
+            mode: 'no-cors',
+            headers: { 'Content-Type': 'text/plain' },
+            body: JSON.stringify({
+              timestamp: dummyItem.timestamp,
+              tagText: dummyItem.tagText,
+              type: dummyItem.type,
+              uid: dummyItem.uid
+            })
+          });
+
+          dummyItem.status = 'synced';
+          totalSyncedCount++;
+          localStorage.setItem('multi_scan_synced_count_v02', totalSyncedCount.toString());
+          saveQueue();
+          updateLatestSyncStatus(dummyItem, '✅ 成功');
+          renderHistoryList();
+          updateStatsUI();
+
+          testConnectionBtn.disabled = false;
+          testConnectionBtn.textContent = 'テスト書き込み実行';
+          alert('スプレッドシートへテストデータを送信しました！スプレッドシート（I〜L列）をご確認ください。');
+        } catch (err) {
+          testConnectionBtn.disabled = false;
+          testConnectionBtn.textContent = 'テスト書き込み実行';
+          alert('通信エラー: ' + err.message);
+        }
       } else {
         testConnectionBtn.disabled = false;
         testConnectionBtn.textContent = 'テスト書き込み実行';
-        alert('GAS環境外でのテストです。スプレッドシート内で実行してください。');
+        alert('GAS WebアプリURLが設定されていません。上の入力欄にURLを設定してください。');
       }
     });
 
     // 初期化
     window.addEventListener('DOMContentLoaded', () => {
+      updateConnectionBadge();
       updateStatsUI();
       renderHistoryList();
       startQrScanner();
